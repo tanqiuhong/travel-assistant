@@ -1,6 +1,5 @@
 """
-智慧旅游助手 - 完整单文件版（使用 pydeck 地图）
-部署到 Streamlit Cloud 稳定无 DOM 错误
+智慧旅游助手 - 完整单文件版（pydeck地图 + 修复openai客户端）
 """
 
 import streamlit as st
@@ -8,11 +7,9 @@ from datetime import datetime
 import os
 import time
 import json
-import requests
 import pandas as pd
 import pydeck as pdk
 from openai import OpenAI
-import base64
 
 # ==================== 页面配置 ====================
 st.set_page_config(
@@ -30,6 +27,23 @@ def get_api_key():
         from dotenv import load_dotenv
         load_dotenv()
         return os.getenv("DEEPSEEK_API_KEY")
+
+# ==================== 统一 OpenAI 客户端 ====================
+def get_openai_client():
+    """创建 OpenAI 客户端，兼容新版（不传递 proxies）"""
+    api_key = get_api_key()
+    if not api_key:
+        return None
+    try:
+        return OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com",
+            timeout=60.0,
+            max_retries=2,
+        )
+    except Exception as e:
+        st.error(f"OpenAI 客户端初始化失败：{e}")
+        return None
 
 # ==================== 高德风格CSS ====================
 st.markdown("""
@@ -90,11 +104,10 @@ st.markdown("""
 # ==================== 数据函数 ====================
 
 def get_weather(city):
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         prompt = f"请提供{city}今天的天气情况（温度、天气状况、风力），以JSON格式：{{'temp':数字,'condition':'描述','wind':'描述','delta':'变化如+2°C'}}"
         response = client.chat.completions.create(
             model="deepseek-chat",
@@ -110,15 +123,15 @@ def get_weather(city):
         else:
             json_str = text.strip()
         return json.loads(json_str)
-    except:
+    except Exception as e:
+        st.warning(f"天气获取失败，使用默认：{e}")
         return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
 
 def get_attractions(city):
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return get_default_attractions(city)
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         prompt = f"""
         为城市 {city} 生成至少5个著名景点，每个景点包含：
         name（名称）, lat（纬度）, lng（经度）, desc（简短描述）, url（官网链接，若不知则空）
@@ -138,7 +151,8 @@ def get_attractions(city):
         else:
             json_str = text.strip()
         return json.loads(json_str)
-    except:
+    except Exception as e:
+        st.warning(f"景点获取失败，使用默认：{e}")
         return get_default_attractions(city)
 
 def get_default_attractions(city):
@@ -147,16 +161,22 @@ def get_default_attractions(city):
             {"name": "西湖", "lat": 30.2741, "lng": 120.1551, "desc": "5A景区，杭州标志", "url": "https://www.hzwestlake.com"},
             {"name": "灵隐寺", "lat": 30.2391, "lng": 120.1062, "desc": "千年古刹", "url": "https://www.lingyinsi.org"},
             {"name": "宋城", "lat": 30.1882, "lng": 120.1338, "desc": "宋代文化主题公园", "url": "https://www.songcn.com"},
+            {"name": "雷峰塔", "lat": 30.2409, "lng": 120.1575, "desc": "西湖十景", "url": ""},
+            {"name": "河坊街", "lat": 30.2519, "lng": 120.1666, "desc": "美食购物", "url": ""},
         ],
         "北京": [
             {"name": "故宫", "lat": 39.9163, "lng": 116.3972, "desc": "明清皇宫", "url": "https://www.dpm.org.cn"},
             {"name": "天安门", "lat": 39.9087, "lng": 116.3975, "desc": "国家象征", "url": ""},
             {"name": "长城", "lat": 40.4319, "lng": 116.5704, "desc": "世界奇迹", "url": "https://www.badalinggreatwall.com"},
+            {"name": "颐和园", "lat": 39.9999, "lng": 116.2737, "desc": "皇家园林", "url": ""},
+            {"name": "天坛", "lat": 39.8819, "lng": 116.4106, "desc": "祭天场所", "url": ""},
         ],
         "成都": [
             {"name": "宽窄巷子", "lat": 30.6586, "lng": 104.0622, "desc": "历史街区", "url": ""},
             {"name": "锦里", "lat": 30.6438, "lng": 104.0567, "desc": "古街", "url": ""},
             {"name": "青城山", "lat": 30.9000, "lng": 103.5692, "desc": "道教名山", "url": "https://www.qingchengshan.com"},
+            {"name": "杜甫草堂", "lat": 30.6609, "lng": 104.0207, "desc": "诗人故居", "url": ""},
+            {"name": "大熊猫基地", "lat": 30.7362, "lng": 104.1505, "desc": "国宝熊猫", "url": ""},
         ],
     }
     if city in defaults:
@@ -165,6 +185,7 @@ def get_default_attractions(city):
         return [
             {"name": f"{city}中央公园", "lat": 30.0, "lng": 120.0, "desc": "城市绿肺", "url": ""},
             {"name": f"{city}博物馆", "lat": 30.01, "lng": 120.01, "desc": "了解历史", "url": ""},
+            {"name": f"{city}老街", "lat": 29.99, "lng": 119.99, "desc": "特色美食", "url": ""},
         ]
 
 def get_coordinates(city):
@@ -196,23 +217,17 @@ def get_coordinates(city):
 # ==================== 地图渲染（pydeck） ====================
 
 def render_map(city_name, attractions, width=400, height=350):
-    """使用 pydeck 渲染地图（更稳定，避免 DOM 错误）"""
     if not attractions:
         st.info("暂无景点数据")
         return
-    
     df = pd.DataFrame(attractions)
     if 'lng' in df.columns:
         df = df.rename(columns={'lng': 'lon'})
-    
     if 'lat' not in df.columns or 'lon' not in df.columns:
         st.error("景点数据缺少经纬度")
         return
-    
     center_lat = df['lat'].mean()
     center_lon = df['lon'].mean()
-    
-    # 散点图层
     layer = pdk.Layer(
         'ScatterplotLayer',
         data=df,
@@ -224,8 +239,6 @@ def render_map(city_name, attractions, width=400, height=350):
         radius_min_pixels=10,
         radius_max_pixels=30,
     )
-    
-    # 文本标签
     text_layer = pdk.Layer(
         'TextLayer',
         data=df,
@@ -236,32 +249,28 @@ def render_map(city_name, attractions, width=400, height=350):
         get_alignment_baseline='"bottom"',
         get_pixel_offset=[0, -20],
     )
-    
     view_state = pdk.ViewState(
         latitude=center_lat,
         longitude=center_lon,
         zoom=12,
         pitch=0,
     )
-    
     deck = pdk.Deck(
         layers=[layer, text_layer],
         initial_view_state=view_state,
         map_style='mapbox://styles/mapbox/light-v10',
         tooltip={"html": "<b>{name}</b><br/>{desc}", "style": {"backgroundColor": "white", "color": "black"}}
     )
-    
     st.pydeck_chart(deck)
     st.caption("📍 蓝色标记为景点，悬停显示名称")
 
 # ==================== 行程生成 ====================
 
 def generate_itinerary(destination, days, budget, interests, travel_style, accommodation):
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation)
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         interests_str = ", ".join([i.replace("🏔️ ", "").replace("🏛️ ", "").replace("🍜 ", "")
                                   .replace("🛍️ ", "").replace("🎢 ", "").replace("🏖️ ", "") for i in interests])
         prompt = f"""
@@ -284,7 +293,6 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
             ],
             temperature=0.6,
             max_tokens=3000,
-            timeout=50
         )
         return response.choices[0].message.content
     except Exception as e:
