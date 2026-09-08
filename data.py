@@ -1,96 +1,68 @@
-import streamlit as st
-from datetime import datetime
+"""
+数据模块 - 所有数据通过 DeepSeek API 实时获取
+支持任意城市，无需本地预置数据
+"""
+
+import json
 import os
-import pandas as pd
+import requests
 from openai import OpenAI
+from dotenv import load_dotenv
 
-st.set_page_config(page_title="旅行手帐", page_icon="🌸", layout="wide")
+load_dotenv()
 
-# ==================== 基础CSS（只改背景色和按钮色，保证兼容性） ====================
-st.markdown("""
-<style>
-    /* 仅改变背景色和部分颜色，不使用外部资源 */
-    .stApp {
-        background-color: #fdf0f4;
-    }
-    .stButton > button {
-        background-color: #d4839b !important;
-        color: white !important;
-    }
-    .stButton > button:hover {
-        background-color: #c07a90 !important;
-    }
-    .css-1d391kg, .css-1aumxhk {
-        background-color: #fff5f8 !important;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# ==================== API 相关 ====================
-def get_api_key():
-    try:
-        return st.secrets["DEEPSEEK_API_KEY"]
-    except:
-        return os.getenv("DEEPSEEK_API_KEY")
-
-def get_openai_client():
-    key = get_api_key()
-    if not key:
-        return None
-    return OpenAI(api_key=key, base_url="https://api.deepseek.com")
 
 def get_weather(city):
-    client = get_openai_client()
-    if not client:
-        return {"temp": 22, "condition": "晴", "wind": "微风"}
+    """
+    调用 DeepSeek 获取天气信息（模拟或真实）
+    也可以使用免费天气 API，这里为了统一使用 DeepSeek
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        # 如果没有 API Key，返回默认天气
+        return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
+    
     try:
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        prompt = f"请提供{city}今天的天气情况，包括温度、天气状况、风力。以JSON格式返回：{{'temp': 数字, 'condition': '描述', 'wind': '风力描述', 'delta': '温度变化如+2°C'}}"
+        
         response = client.chat.completions.create(
             model="deepseek-chat",
-            messages=[{"role": "user", "content": f"{city}天气，JSON格式：{{'temp':数字,'condition':'描述','wind':'描述'}}"}],
+            messages=[
+                {"role": "system", "content": "你是一个天气助手，返回准确天气信息。"},
+                {"role": "user", "content": prompt}
+            ],
             temperature=0.3,
-            max_tokens=100
+            max_tokens=200
         )
-        import json
-        return json.loads(response.choices[0].message.content)
-    except:
-        return {"temp": 22, "condition": "晴", "wind": "微风"}
+        result_text = response.choices[0].message.content
+        # 解析JSON
+        if "```json" in result_text:
+            json_str = result_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in result_text:
+            json_str = result_text.split("```")[1].split("```")[0].strip()
+        else:
+            json_str = result_text.strip()
+        weather = json.loads(json_str)
+        return weather
+    except Exception as e:
+        # 出错时返回默认
+        return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
+
 
 def get_attractions(city):
-    client = get_openai_client()
-    if not client:
-        return []
+    """
+    调用 DeepSeek 获取城市景点列表（含名称、坐标、描述、官网链接）
+    如果API失败，返回默认的示例景点（仅用于演示）
+    """
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        # 无API Key时返回默认示例数据
+        return get_default_attractions(city)
+    
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": f"{city}景点，JSON数组：[{{'name':'名称','lat':纬度,'lng':经度,'desc':'描述'}}]"}],
-            temperature=0.3,
-            max_tokens=500
-        )
-        import json
-        return json.loads(response.choices[0].message.content)
-    except:
-        return []
-
-st.title("🌸 旅行手帐")
-st.caption("智慧旅游助手")
-
-destination = st.text_input("目的地", value="杭州")
-days = st.slider("天数", 1, 7, 3)
-interests = st.multiselect("兴趣", ["自然", "历史", "美食"], default=["自然", "美食"])
-
-if st.button("生成行程"):
-    with st.spinner("生成中..."):
-        weather = get_weather(destination)
-        st.write(f"### 天气")
-        st.write(f"{weather.get('temp')}°C, {weather.get('condition')}, {weather.get('wind')}")
-        
-        attrs = get_attractions(destination)
-        if attrs:
-            st.write("### 推荐景点")
-            for a in attrs:
-                st.write(f"- {a['name']}: {a.get('desc', '')}")
-        else:
-            st.info("暂无景点数据，可尝试设置API Key")        prompt = f"""
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        prompt = f"""
         请为城市 {city} 生成一份景点列表，包含至少5个著名景点。
         每个景点需要提供：
         - name: 景点名称
