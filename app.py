@@ -1,6 +1,6 @@
 """
 旅行手帐 · 智慧旅游助手
-日系清新风格 | 樱花粉 | 电车背景 | 简约优雅
+日系清新风格 | 樱花粉 | 简约优雅
 """
 
 import streamlit as st
@@ -42,37 +42,32 @@ def get_openai_client():
     except:
         return None
 
-# ==================== 日系清新风格 CSS ====================
+# ==================== 日系清新风格 CSS（修复版） ====================
 st.markdown("""
 <style>
-    /* 全局背景 - 电车图片 + 樱花粉半透明层 */
+    /* 樱色主题 - 纯CSS，不依赖外部图片 */
     .stApp {
-        background: linear-gradient(135deg, rgba(255, 245, 247, 0.92), rgba(255, 235, 240, 0.88)),
-                    url('https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1600&q=80');
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
+        background: linear-gradient(135deg, #fdf0f4 0%, #fce4ec 50%, #f8e0e8 100%);
     }
     
     /* 主容器 - 半透明白色磨砂 */
     .main .block-container {
-        background: rgba(255, 248, 250, 0.85);
-        backdrop-filter: blur(8px);
+        background: rgba(255, 248, 250, 0.92);
         border-radius: 24px;
         padding: 2rem 2.5rem !important;
         margin: 1rem auto;
-        box-shadow: 0 8px 40px rgba(200, 150, 160, 0.15);
+        box-shadow: 0 8px 40px rgba(200, 150, 160, 0.12);
         border: 1px solid rgba(255, 220, 230, 0.3);
     }
     
-    /* 标题 - 日系手写风格 */
+    /* 标题 */
     .main-title {
         font-size: 2.2rem;
         font-weight: 300;
         color: #4a3a40;
         margin-bottom: 0.1rem;
         letter-spacing: 4px;
-        font-family: 'Georgia', 'Yu Mincho', serif;
+        font-family: 'Georgia', serif;
     }
     .main-title span {
         color: #d4839b;
@@ -96,19 +91,14 @@ st.markdown("""
         padding-bottom: 12px;
     }
     
-    /* 卡片 - 柔和樱花粉 */
+    /* 卡片 */
     .card {
-        background: rgba(255, 250, 252, 0.85);
-        backdrop-filter: blur(4px);
+        background: rgba(255, 250, 252, 0.9);
         border-radius: 18px;
         padding: 20px 24px;
         margin-bottom: 16px;
         border: 1px solid rgba(245, 210, 220, 0.4);
-        box-shadow: 0 4px 20px rgba(200, 150, 165, 0.08);
-        transition: box-shadow 0.3s;
-    }
-    .card:hover {
-        box-shadow: 0 6px 30px rgba(200, 150, 165, 0.15);
+        box-shadow: 0 4px 20px rgba(200, 150, 165, 0.06);
     }
     .card-title {
         font-size: 1rem;
@@ -116,15 +106,14 @@ st.markdown("""
         color: #4a3a40;
         margin-bottom: 12px;
         letter-spacing: 3px;
-        font-family: 'Georgia', 'Yu Mincho', serif;
+        font-family: 'Georgia', serif;
         border-bottom: 1px dashed #ecd5dd;
         padding-bottom: 8px;
     }
     
-    /* 侧边栏 - 半透明白 */
+    /* 侧边栏 */
     .css-1d391kg, .css-1aumxhk {
-        background: rgba(255, 248, 250, 0.88) !important;
-        backdrop-filter: blur(8px);
+        background: rgba(255, 248, 250, 0.95) !important;
         border-right: 1px solid rgba(235, 200, 210, 0.3) !important;
     }
     .css-1aumxhk .stTextInput > label,
@@ -142,7 +131,7 @@ st.markdown("""
         color: #3d3d3d !important;
     }
     
-    /* 按钮 - 樱花粉渐变 */
+    /* 按钮 */
     .stButton > button {
         background: linear-gradient(135deg, #e8a0b5, #d4839b) !important;
         color: white !important;
@@ -151,13 +140,12 @@ st.markdown("""
         font-weight: 400 !important;
         letter-spacing: 3px;
         padding: 10px 28px !important;
-        box-shadow: 0 4px 16px rgba(200, 120, 145, 0.25) !important;
-        transition: all 0.3s ease !important;
-        font-family: 'Georgia', 'Yu Mincho', serif;
+        box-shadow: 0 4px 16px rgba(200, 120, 145, 0.2) !important;
+        font-family: 'Georgia', serif;
     }
     .stButton > button:hover {
         transform: translateY(-2px);
-        box-shadow: 0 8px 28px rgba(200, 120, 145, 0.35) !important;
+        box-shadow: 0 8px 28px rgba(200, 120, 145, 0.3) !important;
         background: linear-gradient(135deg, #eab0c3, #d88ba0) !important;
     }
     
@@ -177,7 +165,7 @@ st.markdown("""
         color: #4a3a40;
         margin-bottom: 16px;
         border: 1px solid rgba(235, 200, 215, 0.3);
-        box-shadow: 0 4px 16px rgba(200, 150, 170, 0.08);
+        box-shadow: 0 4px 16px rgba(200, 150, 170, 0.06);
     }
     .weather-temp {
         font-size: 2rem;
@@ -211,7 +199,6 @@ st.markdown("""
         gap: 12px;
         padding: 6px 8px;
         border-radius: 10px;
-        transition: background 0.2s;
         border-bottom: 1px solid #f5e8ee;
     }
     .attraction-item:last-child {
@@ -249,9 +236,9 @@ st.markdown("""
         color: #b86a82 !important;
     }
     
-    /* 行程内容样式 */
+    /* 行程内容 */
     .itinerary-text {
-        font-family: 'Georgia', 'Yu Mincho', serif;
+        font-family: 'Georgia', serif;
         line-height: 1.9;
         color: #3d3d3d;
         font-weight: 300;
@@ -287,7 +274,7 @@ st.markdown("""
     .sidebar-title {
         text-align: center;
         padding: 8px 0 16px 0;
-        font-family: 'Georgia', 'Yu Mincho', serif;
+        font-family: 'Georgia', serif;
     }
     .sidebar-title .icon {
         font-size: 2rem;
@@ -329,14 +316,6 @@ st.markdown("""
     ::-webkit-scrollbar-thumb {
         background: #d4839b;
         border-radius: 10px;
-    }
-    
-    /* 地图容器 */
-    .map-container {
-        border-radius: 14px;
-        overflow: hidden;
-        border: 1px solid #f0dce3;
-        box-shadow: 0 4px 16px rgba(200, 150, 165, 0.06);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -452,7 +431,7 @@ def get_coordinates(city):
     }
     return coords.get(city, [30.2741, 120.1551])
 
-# ==================== 地图渲染（使用 st.map，无额外依赖） ====================
+# ==================== 地图渲染（st.map） ====================
 
 def render_map(city_name, attractions, width=400, height=350):
     if not attractions:
@@ -464,7 +443,6 @@ def render_map(city_name, attractions, width=400, height=350):
     if 'lat' not in df.columns or 'lon' not in df.columns:
         st.error("景点数据缺少经纬度")
         return
-    # 用 st.map 显示
     st.map(df[['lat', 'lon']], zoom=12, use_container_width=True)
     st.caption("景点位置")
 
@@ -475,7 +453,7 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
     if not client:
         return generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation)
     try:
-        interests_str = ", ".join([i for i in interests])  # 去除表情符号
+        interests_str = ", ".join(interests)
         prompt = f"""
         为以下旅行需求生成详细{days}天行程，必须包含每天的详细交通指引：
         目的地：{destination}
@@ -486,13 +464,13 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
         住宿：{accommodation}
         交通要求：每段标注具体公交线路（如27路）、地铁线、上下车站点、方向、站数、时间、票价。
         格式示例：公交27路（开往植物园）| 断桥站→茅家埠站 | 4站 | 约10分钟 | 2元
-        请用中文数字标记天数，表述优雅简洁，减少表情符号使用。
+        请用中文数字标记天数，表述优雅简洁。
         按天输出，Markdown格式。
         """
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是资深旅行规划师，精通公共交通。表述优雅简洁，少用表情符号。"},
+                {"role": "system", "content": "你是资深旅行规划师，精通公共交通。表述优雅简洁。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.6,
@@ -513,7 +491,7 @@ def generate_simple_itinerary(destination, days, budget, interests, travel_style
     itin += "交通贴士：建议下载当地公交应用，使用地图应用实时查询。"
     return itin
 
-# ==================== 初始化 Session State ====================
+# ==================== 初始化 ====================
 
 if 'history' not in st.session_state:
     st.session_state.history = []
