@@ -1,6 +1,6 @@
 """
-智慧旅游助手 - 日系清新风格版
-樱色为主，电车背景，简约优雅
+旅行手帐 · 智慧旅游助手
+日系清新风格 | 樱花粉 | 电车背景 | 简约优雅
 """
 
 import streamlit as st
@@ -9,7 +9,6 @@ import os
 import time
 import json
 import pandas as pd
-import pydeck as pdk
 from openai import OpenAI
 
 # ==================== 页面配置 ====================
@@ -40,13 +39,13 @@ def get_openai_client():
             timeout=60.0,
             max_retries=2,
         )
-    except Exception as e:
+    except:
         return None
 
-# ==================== 日系清新风格CSS ====================
+# ==================== 日系清新风格 CSS ====================
 st.markdown("""
 <style>
-    /* 全局背景 - 电车图片 + 樱花粉叠加 */
+    /* 全局背景 - 电车图片 + 樱花粉半透明层 */
     .stApp {
         background: linear-gradient(135deg, rgba(255, 245, 247, 0.92), rgba(255, 235, 240, 0.88)),
                     url('https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1600&q=80');
@@ -55,7 +54,7 @@ st.markdown("""
         background-attachment: fixed;
     }
     
-    /* 主容器半透明白色 */
+    /* 主容器 - 半透明白色磨砂 */
     .main .block-container {
         background: rgba(255, 248, 250, 0.85);
         backdrop-filter: blur(8px);
@@ -161,11 +160,8 @@ st.markdown("""
         box-shadow: 0 8px 28px rgba(200, 120, 145, 0.35) !important;
         background: linear-gradient(135deg, #eab0c3, #d88ba0) !important;
     }
-    .stButton > button:active {
-        transform: translateY(0px);
-    }
     
-    /* 进度条 - 樱花色 */
+    /* 进度条 */
     .stProgress > div > div {
         background: linear-gradient(90deg, #f0c8d5, #d4839b) !important;
     }
@@ -173,9 +169,9 @@ st.markdown("""
         background: #f5e4ea !important;
     }
     
-    /* 天气卡片 - 樱花渐变 */
+    /* 天气卡片 */
     .weather-card {
-        background: linear-gradient(135deg, #f5e0e8, #eccee0, #f5e0e8);
+        background: linear-gradient(135deg, #f5e0e8, #eccee0);
         border-radius: 18px;
         padding: 16px 20px;
         color: #4a3a40;
@@ -208,7 +204,7 @@ st.markdown("""
         font-weight: 300;
     }
     
-    /* 景点列表 - 日系简约 */
+    /* 景点列表 */
     .attraction-item {
         display: flex;
         align-items: center;
@@ -261,11 +257,6 @@ st.markdown("""
         font-weight: 300;
         letter-spacing: 0.5px;
     }
-    .itinerary-text h1, .itinerary-text h2, .itinerary-text h3 {
-        font-weight: 300;
-        color: #4a3a40;
-        letter-spacing: 2px;
-    }
     .itinerary-text strong {
         color: #c07a90;
         font-weight: 400;
@@ -276,7 +267,7 @@ st.markdown("""
         margin: 16px 0;
     }
     
-    /* 交通贴士 - 日系 */
+    /* 交通贴士 */
     .travel-tip {
         background: rgba(250, 240, 245, 0.7);
         border-radius: 14px;
@@ -292,7 +283,7 @@ st.markdown("""
         color: #c07a90;
     }
     
-    /* 侧边栏标题 - 日系 */
+    /* 侧边栏标题 */
     .sidebar-title {
         text-align: center;
         padding: 8px 0 16px 0;
@@ -311,29 +302,12 @@ st.markdown("""
         margin-top: 2px;
     }
     
-    /* 分割线 - 樱花 */
+    /* 分割线 */
     .divider-sakura {
         border: 0;
         height: 1px;
         background: linear-gradient(90deg, transparent, #ecd5dd, transparent);
         margin: 16px 0;
-    }
-    
-    /* 历史记录按钮 */
-    .history-btn .stButton > button {
-        background: transparent !important;
-        color: #b08a96 !important;
-        box-shadow: none !important;
-        border: 1px solid #ecd5dd !important;
-        border-radius: 20px !important;
-        padding: 4px 14px !important;
-        font-size: 0.8rem !important;
-        letter-spacing: 1px;
-    }
-    .history-btn .stButton > button:hover {
-        background: #f5e4ea !important;
-        transform: none !important;
-        box-shadow: none !important;
     }
     
     /* 响应式 */
@@ -478,7 +452,7 @@ def get_coordinates(city):
     }
     return coords.get(city, [30.2741, 120.1551])
 
-# ==================== 地图渲染 ====================
+# ==================== 地图渲染（使用 st.map，无额外依赖） ====================
 
 def render_map(city_name, attractions, width=400, height=350):
     if not attractions:
@@ -490,42 +464,9 @@ def render_map(city_name, attractions, width=400, height=350):
     if 'lat' not in df.columns or 'lon' not in df.columns:
         st.error("景点数据缺少经纬度")
         return
-    center_lat = df['lat'].mean()
-    center_lon = df['lon'].mean()
-    layer = pdk.Layer(
-        'ScatterplotLayer',
-        data=df,
-        get_position='[lon, lat]',
-        get_radius=200,
-        get_fill_color='[212, 131, 155, 200]',
-        pickable=True,
-        auto_highlight=True,
-        radius_min_pixels=10,
-        radius_max_pixels=30,
-    )
-    text_layer = pdk.Layer(
-        'TextLayer',
-        data=df,
-        get_position='[lon, lat]',
-        get_text='name',
-        get_size=11,
-        get_color='[60, 50, 55, 200]',
-        get_alignment_baseline='"bottom"',
-        get_pixel_offset=[0, -18],
-    )
-    view_state = pdk.ViewState(
-        latitude=center_lat,
-        longitude=center_lon,
-        zoom=12,
-        pitch=0,
-    )
-    deck = pdk.Deck(
-        layers=[layer, text_layer],
-        initial_view_state=view_state,
-        map_style='mapbox://styles/mapbox/light-v10',
-        tooltip={"html": "<b>{name}</b><br/>{desc}", "style": {"backgroundColor": "white", "color": "#4a3a40"}}
-    )
-    st.pydeck_chart(deck)
+    # 用 st.map 显示
+    st.map(df[['lat', 'lon']], zoom=12, use_container_width=True)
+    st.caption("景点位置")
 
 # ==================== 行程生成 ====================
 
@@ -534,8 +475,7 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
     if not client:
         return generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation)
     try:
-        interests_str = ", ".join([i.replace("自然风光", "").replace("历史文化", "").replace("美食探店", "")
-                                  .replace("购物", "").replace("主题乐园", "").replace("休闲度假", "") for i in interests])
+        interests_str = ", ".join([i for i in interests])  # 去除表情符号
         prompt = f"""
         为以下旅行需求生成详细{days}天行程，必须包含每天的详细交通指引：
         目的地：{destination}
@@ -546,7 +486,7 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
         住宿：{accommodation}
         交通要求：每段标注具体公交线路（如27路）、地铁线、上下车站点、方向、站数、时间、票价。
         格式示例：公交27路（开往植物园）| 断桥站→茅家埠站 | 4站 | 约10分钟 | 2元
-        请用中文数字标记天数，使用优雅简洁的表述，减少表情符号使用。
+        请用中文数字标记天数，表述优雅简洁，减少表情符号使用。
         按天输出，Markdown格式。
         """
         response = client.chat.completions.create(
@@ -573,7 +513,7 @@ def generate_simple_itinerary(destination, days, budget, interests, travel_style
     itin += "交通贴士：建议下载当地公交应用，使用地图应用实时查询。"
     return itin
 
-# ==================== 初始化 ====================
+# ==================== 初始化 Session State ====================
 
 if 'history' not in st.session_state:
     st.session_state.history = []
@@ -590,7 +530,7 @@ with st.sidebar:
     st.markdown("""
     <div class="sidebar-title">
         <div class="icon">🌸</div>
-        <div class="text">旅 行 设 置</div>
+        <div class="text">旅行设置</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -722,7 +662,7 @@ with col2:
     st.markdown('<div class="card-title">景点地图</div>', unsafe_allow_html=True)
     attrs = st.session_state.attractions if st.session_state.attractions else get_attractions(destination)
     if attrs:
-        render_map(destination, attrs, width=400, height=320)
+        render_map(destination, attrs)
     else:
         st.info("暂无景点数据")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -767,5 +707,3 @@ with col_f2:
         st.rerun()
 with col_f3:
     st.caption(datetime.now().strftime("%Y年%m月%d日"))
-with col_f3:
-    st.caption(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
