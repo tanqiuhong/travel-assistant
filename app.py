@@ -1,7 +1,6 @@
 """
-智慧旅游助手 - 完整单文件版
-支持手机访问，含地图、交通指引、DeepSeek AI
-部署到 Streamlit Cloud 时只需此文件 + requirements.txt
+旅行手帐 · 智慧旅游助手
+日系清新风格 | 樱花粉 | 电车背景 | 简约优雅
 """
 
 import streamlit as st
@@ -9,24 +8,19 @@ from datetime import datetime
 import os
 import time
 import json
-import requests
 import pandas as pd
-import folium
-from streamlit.components.v1 import html
 from openai import OpenAI
-import base64
 
 # ==================== 页面配置 ====================
 st.set_page_config(
-    page_title="🌍 智慧旅游助手",
-    page_icon="🗺️",
+    page_title="旅行手帐 · 智慧旅游助手",
+    page_icon="🌸",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ==================== API Key 读取 ====================
 def get_api_key():
-    """优先从 Streamlit Secrets 读取，其次从环境变量"""
     try:
         return st.secrets["DEEPSEEK_API_KEY"]
     except:
@@ -34,59 +28,315 @@ def get_api_key():
         load_dotenv()
         return os.getenv("DEEPSEEK_API_KEY")
 
-# ==================== 高德风格CSS ====================
+def get_openai_client():
+    api_key = get_api_key()
+    if not api_key:
+        return None
+    try:
+        return OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com",
+            timeout=60.0,
+            max_retries=2,
+        )
+    except:
+        return None
+
+# ==================== 日系清新风格 CSS ====================
 st.markdown("""
 <style>
-    .main-title { font-size: 2.5rem; font-weight: 700; color: #1a1a2e; margin-bottom: 0.2rem; }
-    .main-title span { color: #1a6dff; }
-    .sub-title { color: #666; font-size: 1rem; margin-bottom: 1.5rem; }
+    /* 全局背景 - 电车图片 + 樱花粉半透明层 */
+    .stApp {
+        background: linear-gradient(135deg, rgba(255, 245, 247, 0.92), rgba(255, 235, 240, 0.88)),
+                    url('https://images.unsplash.com/photo-1545569341-9eb8b30979d9?w=1600&q=80');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }
+    
+    /* 主容器 - 半透明白色磨砂 */
+    .main .block-container {
+        background: rgba(255, 248, 250, 0.85);
+        backdrop-filter: blur(8px);
+        border-radius: 24px;
+        padding: 2rem 2.5rem !important;
+        margin: 1rem auto;
+        box-shadow: 0 8px 40px rgba(200, 150, 160, 0.15);
+        border: 1px solid rgba(255, 220, 230, 0.3);
+    }
+    
+    /* 标题 - 日系手写风格 */
+    .main-title {
+        font-size: 2.2rem;
+        font-weight: 300;
+        color: #4a3a40;
+        margin-bottom: 0.1rem;
+        letter-spacing: 4px;
+        font-family: 'Georgia', 'Yu Mincho', serif;
+    }
+    .main-title span {
+        color: #d4839b;
+        font-weight: 400;
+    }
+    .main-title .sub {
+        font-size: 0.9rem;
+        color: #b08a96;
+        letter-spacing: 6px;
+        font-weight: 300;
+        display: block;
+        margin-top: 2px;
+    }
+    .sub-title {
+        color: #b08a96;
+        font-size: 0.9rem;
+        margin-bottom: 1.8rem;
+        letter-spacing: 2px;
+        font-weight: 300;
+        border-bottom: 1px solid #f0dce3;
+        padding-bottom: 12px;
+    }
+    
+    /* 卡片 - 柔和樱花粉 */
     .card {
-        background: white;
-        border-radius: 16px;
+        background: rgba(255, 250, 252, 0.85);
+        backdrop-filter: blur(4px);
+        border-radius: 18px;
         padding: 20px 24px;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
         margin-bottom: 16px;
-        border: 1px solid #f0f0f0;
+        border: 1px solid rgba(245, 210, 220, 0.4);
+        box-shadow: 0 4px 20px rgba(200, 150, 165, 0.08);
+        transition: box-shadow 0.3s;
     }
-    .card-title { font-size: 1.1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .card:hover {
+        box-shadow: 0 6px 30px rgba(200, 150, 165, 0.15);
+    }
+    .card-title {
+        font-size: 1rem;
+        font-weight: 400;
+        color: #4a3a40;
+        margin-bottom: 12px;
+        letter-spacing: 3px;
+        font-family: 'Georgia', 'Yu Mincho', serif;
+        border-bottom: 1px dashed #ecd5dd;
+        padding-bottom: 8px;
+    }
+    
+    /* 侧边栏 - 半透明白 */
+    .css-1d391kg, .css-1aumxhk {
+        background: rgba(255, 248, 250, 0.88) !important;
+        backdrop-filter: blur(8px);
+        border-right: 1px solid rgba(235, 200, 210, 0.3) !important;
+    }
+    .css-1aumxhk .stTextInput > label,
+    .css-1aumxhk .stSlider > label,
+    .css-1aumxhk .stSelectbox > label,
+    .css-1aumxhk .stMultiselect > label {
+        color: #6a5a60 !important;
+        font-weight: 300 !important;
+        letter-spacing: 1px;
+    }
+    .css-1aumxhk .stTextInput > div > input {
+        background: rgba(255, 245, 248, 0.7) !important;
+        border: 1px solid #f0dce3 !important;
+        border-radius: 12px !important;
+        color: #3d3d3d !important;
+    }
+    
+    /* 按钮 - 樱花粉渐变 */
+    .stButton > button {
+        background: linear-gradient(135deg, #e8a0b5, #d4839b) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 30px !important;
+        font-weight: 400 !important;
+        letter-spacing: 3px;
+        padding: 10px 28px !important;
+        box-shadow: 0 4px 16px rgba(200, 120, 145, 0.25) !important;
+        transition: all 0.3s ease !important;
+        font-family: 'Georgia', 'Yu Mincho', serif;
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 28px rgba(200, 120, 145, 0.35) !important;
+        background: linear-gradient(135deg, #eab0c3, #d88ba0) !important;
+    }
+    
+    /* 进度条 */
+    .stProgress > div > div {
+        background: linear-gradient(90deg, #f0c8d5, #d4839b) !important;
+    }
+    .stProgress > div {
+        background: #f5e4ea !important;
+    }
+    
+    /* 天气卡片 */
     .weather-card {
-        background: linear-gradient(135deg, #1a6dff, #4a9eff);
-        border-radius: 16px;
+        background: linear-gradient(135deg, #f5e0e8, #eccee0);
+        border-radius: 18px;
         padding: 16px 20px;
-        color: white;
+        color: #4a3a40;
         margin-bottom: 16px;
+        border: 1px solid rgba(235, 200, 215, 0.3);
+        box-shadow: 0 4px 16px rgba(200, 150, 170, 0.08);
     }
-    .weather-temp { font-size: 2.2rem; font-weight: 700; }
-    .weather-desc { font-size: 0.95rem; opacity: 0.9; }
+    .weather-temp {
+        font-size: 2rem;
+        font-weight: 300;
+        color: #4a3a40;
+        font-family: 'Georgia', serif;
+    }
+    .weather-temp .unit {
+        font-size: 1rem;
+        font-weight: 300;
+        color: #b08a96;
+    }
+    .weather-desc {
+        font-size: 0.9rem;
+        color: #6a5a60;
+        opacity: 0.85;
+        font-weight: 300;
+        letter-spacing: 1px;
+    }
+    .weather-place {
+        font-size: 0.8rem;
+        color: #b08a96;
+        letter-spacing: 2px;
+        font-weight: 300;
+    }
+    
+    /* 景点列表 */
     .attraction-item {
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 8px 12px;
+        padding: 6px 8px;
         border-radius: 10px;
         transition: background 0.2s;
+        border-bottom: 1px solid #f5e8ee;
     }
-    .attraction-item:hover { background: #f5f7fa; }
-    .attraction-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .stButton > button {
-        background: #1a6dff !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 2px 8px rgba(26, 109, 255, 0.3) !important;
+    .attraction-item:last-child {
+        border-bottom: none;
     }
-    .stButton > button:hover {
-        background: #1558d4 !important;
-        box-shadow: 0 4px 16px rgba(26, 109, 255, 0.4) !important;
-        transform: translateY(-1px);
+    .attraction-item:hover {
+        background: #faf0f4;
     }
-    .stProgress > div > div { background: linear-gradient(90deg, #1a6dff, #4a9eff) !important; }
-    /* 移动端优化 */
+    .attraction-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .attraction-name {
+        font-weight: 350;
+        color: #4a3a40;
+        font-size: 0.9rem;
+    }
+    .attraction-desc {
+        font-size: 0.75rem;
+        color: #b09aa2;
+        margin-left: auto;
+        font-weight: 300;
+        letter-spacing: 0.5px;
+    }
+    .attraction-link {
+        color: #d4839b !important;
+        text-decoration: none !important;
+        font-size: 0.75rem;
+        margin-left: 8px;
+        border-bottom: 1px dotted #d4839b;
+    }
+    .attraction-link:hover {
+        color: #b86a82 !important;
+    }
+    
+    /* 行程内容样式 */
+    .itinerary-text {
+        font-family: 'Georgia', 'Yu Mincho', serif;
+        line-height: 1.9;
+        color: #3d3d3d;
+        font-weight: 300;
+        letter-spacing: 0.5px;
+    }
+    .itinerary-text strong {
+        color: #c07a90;
+        font-weight: 400;
+    }
+    .itinerary-text hr {
+        border: 0;
+        border-top: 1px dashed #ecd5dd;
+        margin: 16px 0;
+    }
+    
+    /* 交通贴士 */
+    .travel-tip {
+        background: rgba(250, 240, 245, 0.7);
+        border-radius: 14px;
+        padding: 14px 18px;
+        margin-top: 12px;
+        border-left: 3px solid #d4839b;
+        font-weight: 300;
+        color: #4a3a40;
+        letter-spacing: 0.5px;
+    }
+    .travel-tip strong {
+        font-weight: 400;
+        color: #c07a90;
+    }
+    
+    /* 侧边栏标题 */
+    .sidebar-title {
+        text-align: center;
+        padding: 8px 0 16px 0;
+        font-family: 'Georgia', 'Yu Mincho', serif;
+    }
+    .sidebar-title .icon {
+        font-size: 2rem;
+        color: #d4839b;
+        opacity: 0.6;
+    }
+    .sidebar-title .text {
+        font-size: 1rem;
+        font-weight: 300;
+        color: #4a3a40;
+        letter-spacing: 4px;
+        margin-top: 2px;
+    }
+    
+    /* 分割线 */
+    .divider-sakura {
+        border: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, #ecd5dd, transparent);
+        margin: 16px 0;
+    }
+    
+    /* 响应式 */
     @media (max-width: 768px) {
-        .main-title { font-size: 1.8rem; }
+        .main-title { font-size: 1.6rem; }
+        .main .block-container { padding: 1rem 1rem !important; }
         .weather-temp { font-size: 1.6rem; }
-        .card { padding: 16px; }
+        .card { padding: 14px 16px; }
+    }
+    
+    /* 滚动条 */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #f5e4ea;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #d4839b;
+        border-radius: 10px;
+    }
+    
+    /* 地图容器 */
+    .map-container {
+        border-radius: 14px;
+        overflow: hidden;
+        border: 1px solid #f0dce3;
+        box-shadow: 0 4px 16px rgba(200, 150, 165, 0.06);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -94,12 +344,10 @@ st.markdown("""
 # ==================== 数据函数 ====================
 
 def get_weather(city):
-    """获取天气（优先DeepSeek，失败返回默认）"""
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         prompt = f"请提供{city}今天的天气情况（温度、天气状况、风力），以JSON格式：{{'temp':数字,'condition':'描述','wind':'描述','delta':'变化如+2°C'}}"
         response = client.chat.completions.create(
             model="deepseek-chat",
@@ -108,7 +356,6 @@ def get_weather(city):
             max_tokens=150
         )
         text = response.choices[0].message.content
-        # 提取JSON
         if "```json" in text:
             json_str = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -120,12 +367,10 @@ def get_weather(city):
         return {"temp": 22, "condition": "晴", "wind": "微风", "delta": "0°C"}
 
 def get_attractions(city):
-    """获取景点列表（优先DeepSeek，失败返回默认）"""
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return get_default_attractions(city)
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         prompt = f"""
         为城市 {city} 生成至少5个著名景点，每个景点包含：
         name（名称）, lat（纬度）, lng（经度）, desc（简短描述）, url（官网链接，若不知则空）
@@ -149,22 +394,27 @@ def get_attractions(city):
         return get_default_attractions(city)
 
 def get_default_attractions(city):
-    """默认景点数据（内置常见城市）"""
     defaults = {
         "杭州": [
             {"name": "西湖", "lat": 30.2741, "lng": 120.1551, "desc": "5A景区，杭州标志", "url": "https://www.hzwestlake.com"},
             {"name": "灵隐寺", "lat": 30.2391, "lng": 120.1062, "desc": "千年古刹", "url": "https://www.lingyinsi.org"},
             {"name": "宋城", "lat": 30.1882, "lng": 120.1338, "desc": "宋代文化主题公园", "url": "https://www.songcn.com"},
+            {"name": "雷峰塔", "lat": 30.2409, "lng": 120.1575, "desc": "西湖十景", "url": ""},
+            {"name": "河坊街", "lat": 30.2519, "lng": 120.1666, "desc": "美食购物", "url": ""},
         ],
         "北京": [
             {"name": "故宫", "lat": 39.9163, "lng": 116.3972, "desc": "明清皇宫", "url": "https://www.dpm.org.cn"},
             {"name": "天安门", "lat": 39.9087, "lng": 116.3975, "desc": "国家象征", "url": ""},
             {"name": "长城", "lat": 40.4319, "lng": 116.5704, "desc": "世界奇迹", "url": "https://www.badalinggreatwall.com"},
+            {"name": "颐和园", "lat": 39.9999, "lng": 116.2737, "desc": "皇家园林", "url": ""},
+            {"name": "天坛", "lat": 39.8819, "lng": 116.4106, "desc": "祭天场所", "url": ""},
         ],
         "成都": [
             {"name": "宽窄巷子", "lat": 30.6586, "lng": 104.0622, "desc": "历史街区", "url": ""},
             {"name": "锦里", "lat": 30.6438, "lng": 104.0567, "desc": "古街", "url": ""},
             {"name": "青城山", "lat": 30.9000, "lng": 103.5692, "desc": "道教名山", "url": "https://www.qingchengshan.com"},
+            {"name": "杜甫草堂", "lat": 30.6609, "lng": 104.0207, "desc": "诗人故居", "url": ""},
+            {"name": "大熊猫基地", "lat": 30.7362, "lng": 104.1505, "desc": "国宝熊猫", "url": ""},
         ],
     }
     if city in defaults:
@@ -173,11 +423,10 @@ def get_default_attractions(city):
         return [
             {"name": f"{city}中央公园", "lat": 30.0, "lng": 120.0, "desc": "城市绿肺", "url": ""},
             {"name": f"{city}博物馆", "lat": 30.01, "lng": 120.01, "desc": "了解历史", "url": ""},
+            {"name": f"{city}老街", "lat": 29.99, "lng": 119.99, "desc": "特色美食", "url": ""},
         ]
 
 def get_coordinates(city):
-    """获取城市中心坐标"""
-    # 内置常见城市坐标
     coords = {
         "杭州": [30.2741, 120.1551],
         "北京": [39.9042, 116.4074],
@@ -203,65 +452,30 @@ def get_coordinates(city):
     }
     return coords.get(city, [30.2741, 120.1551])
 
-# ==================== 地图渲染 ====================
+# ==================== 地图渲染（使用 st.map，无额外依赖） ====================
 
 def render_map(city_name, attractions, width=400, height=350):
-    """使用 Folium + 高德底图渲染地图"""
     if not attractions:
         st.info("暂无景点数据")
         return
-    # 计算中心
-    lats = [a['lat'] for a in attractions]
-    lngs = [a['lng'] for a in attractions]
-    center = [sum(lats)/len(lats), sum(lngs)/len(lngs)]
-    
-    # 高德瓦片（街道图）
-    tile_url = 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'
-    m = folium.Map(location=center, zoom_start=13, tiles=tile_url, attr='© 高德地图', control_scale=True, width='100%', height='100%')
-    
-    # 城市中心标记
-    folium.Marker(location=center, popup=f"<b>📍 {city_name}</b><br>城市中心", icon=folium.Icon(color='blue', icon='home', prefix='fa'), tooltip=f"{city_name}市中心").add_to(m)
-    
-    # 景点标记
-    colors = ['#1a6dff', '#ff6b35', '#00c853', '#ffab00', '#e040fb', '#00bcd4', '#ff5252', '#7c4dff']
-    for idx, attr in enumerate(attractions):
-        color = colors[idx % len(colors)]
-        url = attr.get('url', '')
-        url_html = f'<br><a href="{url}" target="_blank" style="color:#1a6dff;">🔗 官网</a>' if url else ''
-        popup_html = f"""
-        <div style="font-family:sans-serif;min-width:160px;padding:8px;">
-            <b style="font-size:16px;">🏛️ {attr['name']}</b><br>
-            <span style="color:#666;font-size:13px;">{attr.get('desc', '')}</span>
-            {url_html}
-        </div>
-        """
-        folium.Marker(location=[attr['lat'], attr['lng']], popup=folium.Popup(popup_html, max_width=300), icon=folium.Icon(color='red', icon='star', prefix='fa'), tooltip=attr['name']).add_to(m)
-    
-    # 城市范围圈
-    folium.Circle(location=center, radius=3000, color='#1a6dff', fill=True, fillColor='#1a6dff', fillOpacity=0.06, weight=2, opacity=0.3).add_to(m)
-    
-    try:
-        map_html = m._repr_html_()
-        html(f"""
-        <div style="width:{width}px; height:{height}px; border-radius:12px; overflow:hidden; box-shadow:0 2px 12px rgba(0,0,0,0.08); border:1px solid #eaeaea;">
-            {map_html}
-        </div>
-        """, height=height+10, width=width)
-        st.caption("🔵 蓝色：城市中心  |  🔴 景点  |  👆 点击查看详情")
-    except Exception as e:
-        st.error(f"地图渲染失败：{e}")
+    df = pd.DataFrame(attractions)
+    if 'lng' in df.columns:
+        df = df.rename(columns={'lng': 'lon'})
+    if 'lat' not in df.columns or 'lon' not in df.columns:
+        st.error("景点数据缺少经纬度")
+        return
+    # 用 st.map 显示
+    st.map(df[['lat', 'lon']], zoom=12, use_container_width=True)
+    st.caption("景点位置")
 
-# ==================== 行程生成（含交通指引） ====================
+# ==================== 行程生成 ====================
 
 def generate_itinerary(destination, days, budget, interests, travel_style, accommodation):
-    """调用 DeepSeek 生成详细行程（含交通指引）"""
-    api_key = get_api_key()
-    if not api_key:
+    client = get_openai_client()
+    if not client:
         return generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation)
     try:
-        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        interests_str = ", ".join([i.replace("🏔️ ", "").replace("🏛️ ", "").replace("🍜 ", "")
-                                  .replace("🛍️ ", "").replace("🎢 ", "").replace("🏖️ ", "") for i in interests])
+        interests_str = ", ".join([i for i in interests])  # 去除表情符号
         prompt = f"""
         为以下旅行需求生成详细{days}天行程，必须包含每天的详细交通指引：
         目的地：{destination}
@@ -270,43 +484,33 @@ def generate_itinerary(destination, days, budget, interests, travel_style, accom
         兴趣：{interests_str}
         风格：{travel_style}
         住宿：{accommodation}
-
-        交通要求：
-        - 每段行程标注具体公交线路（如27路）、地铁线（如1号线）、上下车站点、方向、站数、时间、票价
-        - 步行/骑行标注时间距离
-        - 打车标注费用时间
-        格式示例：
-        🚌 公交27路（开往植物园）| 断桥站→茅家埠站 | 4站 | 约10分钟 | ¥2
-        🚇 地铁1号线（开往湘湖）| 龙翔桥站→定安路站 | 2站 | 约6分钟 | ¥3
-        🚶 步行：沿南山路步行约8分钟 | 600米
-
+        交通要求：每段标注具体公交线路（如27路）、地铁线、上下车站点、方向、站数、时间、票价。
+        格式示例：公交27路（开往植物园）| 断桥站→茅家埠站 | 4站 | 约10分钟 | 2元
+        请用中文数字标记天数，表述优雅简洁，减少表情符号使用。
         按天输出，Markdown格式。
         """
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": "你是资深旅行规划师，精通各城市公共交通，必须提供具体线路和站点。"},
+                {"role": "system", "content": "你是资深旅行规划师，精通公共交通。表述优雅简洁，少用表情符号。"},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.6,
             max_tokens=3000,
-            timeout=50
         )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"DeepSeek 生成失败：{e}")
+        st.error(f"生成失败：{e}")
         return generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation)
 
 def generate_simple_itinerary(destination, days, budget, interests, travel_style, accommodation):
-    """备用简单行程（含交通示例）"""
-    days_emoji = ["🎯", "🌟", "✨", "🎪", "🏰", "🌅", "🌄", "🎆", "🏮", "🎉"]
-    itin = f"📍 **{destination} {days}天{travel_style}之旅** (预算：{budget})\n\n"
+    itin = f"**{destination} {days}日{travel_style}之旅** (预算：{budget})\n\n"
     for i in range(1, days+1):
-        itin += f"**{days_emoji[i-1]} Day {i}**\n"
-        itin += "上午：🚌 公交/地铁前往景点（具体线路请查询当地交通APP）\n"
-        itin += "下午：🚶 步行游览周边\n"
-        itin += "晚上：🍜 美食探索\n\n"
-    itin += "📌 **交通贴士**：建议下载当地公交APP，使用高德/百度地图实时查询。\n"
+        itin += f"**第{i}日**\n"
+        itin += "上午：搭乘公交或地铁前往景点（具体线路请查询当地交通应用）\n"
+        itin += "下午：漫步周边街区，感受当地生活气息\n"
+        itin += "傍晚：寻觅特色美食\n\n"
+    itin += "交通贴士：建议下载当地公交应用，使用地图应用实时查询。"
     return itin
 
 # ==================== 初始化 Session State ====================
@@ -324,45 +528,48 @@ if 'city_coords' not in st.session_state:
 
 with st.sidebar:
     st.markdown("""
-    <div style="text-align:center;padding:12px 0 20px 0;">
-        <div style="font-size:2.4rem;">🗺️</div>
-        <div style="font-size:1.1rem;font-weight:600;color:#1a1a2e;">旅行设置</div>
+    <div class="sidebar-title">
+        <div class="icon">🌸</div>
+        <div class="text">旅行设置</div>
     </div>
     """, unsafe_allow_html=True)
     
-    destination = st.text_input("📍 目的地", placeholder="如：杭州、成都...", value="杭州")
-    days = st.slider("📅 天数", 1, 10, 3)
-    budget = st.selectbox("💰 预算", ["经济型 (¥200-500/天)", "舒适型 (¥500-1000/天)", "豪华型 (¥1000+/天)"])
-    interests = st.multiselect("🎯 兴趣", ["🏔️ 自然风光", "🏛️ 历史文化", "🍜 美食探店", "🛍️ 购物", "🎢 主题乐园", "🏖️ 休闲度假"], default=["🏔️ 自然风光", "🍜 美食探店"])
-    with st.expander("⚙️ 更多选项"):
-        travel_style = st.selectbox("风格", ["悠闲放松", "深度探索", "网红打卡", "亲子游"])
-        accommodation = st.selectbox("住宿", ["特色民宿", "经济酒店", "星级酒店"])
-    with st.expander("🔑 API 设置"):
+    destination = st.text_input("目的地", placeholder="如：杭州、京都...", value="杭州")
+    days = st.slider("旅行天数", 1, 10, 3)
+    budget = st.selectbox("预算", ["经济型 (200-500元/天)", "舒适型 (500-1000元/天)", "豪华型 (1000元以上/天)"])
+    interests = st.multiselect("兴趣偏好", ["自然风光", "历史文化", "美食探店", "购物", "主题乐园", "休闲度假"], default=["自然风光", "美食探店"])
+    with st.expander("更多选项"):
+        travel_style = st.selectbox("旅行风格", ["悠闲放松", "深度探索", "网红打卡", "亲子游"])
+        accommodation = st.selectbox("住宿偏好", ["特色民宿", "经济酒店", "星级酒店"])
+    with st.expander("API 设置"):
         api_key_input = st.text_input("DeepSeek API Key", type="password", placeholder="留空使用示例数据")
         if api_key_input:
-            # 在本地测试时，设置环境变量
             os.environ["DEEPSEEK_API_KEY"] = api_key_input
-            st.success("✅ 已设置（当前会话有效）")
+            st.success("已设置")
         else:
-            st.info("💡 不设置可使用示例数据")
+            st.caption("不设置可使用示例数据")
     
-    generate_btn = st.button("🚀 生成行程计划", type="primary", use_container_width=True)
+    generate_btn = st.button("生成行程", type="primary", use_container_width=True)
     
-    st.divider()
-    st.subheader("📜 历史")
+    st.markdown('<hr class="divider-sakura">', unsafe_allow_html=True)
+    st.markdown("**旅行记录**")
     if st.session_state.history:
         for i, item in enumerate(st.session_state.history[-5:]):
-            if st.button(f"📌 {item['destination']} ({item['date']})", key=f"hist_{i}"):
+            if st.button(f"{item['destination']} ({item['date']})", key=f"hist_{i}"):
                 st.session_state.current_itinerary = item['itinerary']
                 st.rerun()
     else:
-        st.caption("暂无")
+        st.caption("暂无记录")
 
 # ==================== 主界面 ====================
 
 st.markdown("""
-<div class="main-title">🌍 智慧旅游<span>助手</span></div>
-<div class="sub-title">✨ AI 定制行程 + 详细交通指引，手机电脑都能用</div>
+<div class="main-title">
+    旅行手帐
+    <span>· 智慧旅游助手</span>
+    <span class="sub">— 为你定制专属旅程 —</span>
+</div>
+<div class="sub-title">输入你的旅行偏好，生成定制行程与交通指引</div>
 """, unsafe_allow_html=True)
 
 col1, col2 = st.columns([2, 1], gap="medium")
@@ -370,65 +577,67 @@ col1, col2 = st.columns([2, 1], gap="medium")
 # ----- 左栏 -----
 with col1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="card-title">🗺️ 推荐行程</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card-title">行程规划</div>', unsafe_allow_html=True)
     
     if generate_btn and destination:
-        with st.status("🚀 开始规划...", expanded=True) as status:
-            status.update(label="🌍 获取景点", state="running")
+        with st.status("正在规划行程...", expanded=True) as status:
+            status.update(label="获取景点信息", state="running")
             try:
                 attrs = get_attractions(destination)
                 st.session_state.attractions = attrs
-                status.update(label=f"✅ 获取 {len(attrs)} 个景点", state="complete")
-            except Exception as e:
-                status.update(label=f"❌ 景点获取失败", state="error")
+                status.update(label=f"已获取 {len(attrs)} 个景点", state="complete")
+            except:
                 attrs = []
                 st.session_state.attractions = []
+                status.update(label="景点获取失败，使用默认数据", state="error")
             
-            status.update(label="📍 获取坐标", state="running")
+            status.update(label="获取地理坐标", state="running")
             try:
                 coords = get_coordinates(destination)
                 st.session_state.city_coords = coords
-                status.update(label="✅ 坐标完成", state="complete")
+                status.update(label="坐标获取完成", state="complete")
             except:
-                status.update(label="⚠️ 坐标使用默认", state="error")
+                status.update(label="坐标使用默认值", state="error")
             
-            status.update(label="📝 生成行程+交通 (DeepSeek)", state="running")
+            status.update(label="生成行程与交通方案", state="running")
             try:
                 itin = generate_itinerary(destination, days, budget, interests, travel_style, accommodation)
                 st.session_state.current_itinerary = itin
-                status.update(label="✅ 行程生成", state="complete")
-            except Exception as e:
-                status.update(label=f"❌ 生成失败", state="error")
-                itin = "⚠️ 生成失败，请重试或检查API。"
+                status.update(label="行程生成完成", state="complete")
+            except:
+                itin = "生成失败，请重试。"
                 st.session_state.current_itinerary = itin
+                status.update(label="生成失败", state="error")
             
             if itin and "失败" not in itin:
                 st.session_state.history.append({'destination': destination, 'date': datetime.now().strftime("%Y-%m-%d %H:%M"), 'itinerary': itin})
-            status.update(label="🎉 完成！", state="complete")
+            status.update(label="规划完成", state="complete")
         
-        # 显示结果
         if st.session_state.current_itinerary:
+            st.markdown('<div class="itinerary-text">', unsafe_allow_html=True)
             st.markdown(st.session_state.current_itinerary)
+            st.markdown('</div>', unsafe_allow_html=True)
+            
             col_exp1, col_exp2 = st.columns(2)
             with col_exp1:
-                st.download_button("📥 导出文本", data=st.session_state.current_itinerary, file_name=f"{destination}_行程.txt", mime="text/plain")
+                st.download_button("导出文本", data=st.session_state.current_itinerary, file_name=f"{destination}_行程.txt", mime="text/plain")
             with col_exp2:
                 html_content = f"<html><body><pre>{st.session_state.current_itinerary}</pre></body></html>"
-                st.download_button("📄 导出HTML", data=html_content, file_name=f"{destination}_行程.html", mime="text/html")
-            # 交通贴士
+                st.download_button("导出HTML", data=html_content, file_name=f"{destination}_行程.html", mime="text/html")
+            
             st.markdown("""
-            <div style="background:#f0f7ff;border-radius:12px;padding:16px;margin-top:12px;border-left:4px solid #1a6dff;">
-                <b>🚌 出行贴士</b><br>
-                • 下载当地公交/地铁APP（如：杭州通、亿通行）<br>
-                • 高德/百度地图实时查公交到站<br>
-                • 共享单车：哈啰/美团<br>
-                • 打车：滴滴出行
+            <div class="travel-tip">
+                <strong>出行贴士</strong><br>
+                建议下载当地公交应用，使用地图应用实时查询公交到站信息。<br>
+                共享单车与打车应用也可作为补充选择。
             </div>
             """, unsafe_allow_html=True)
     elif st.session_state.current_itinerary:
+        st.markdown('<div class="itinerary-text">', unsafe_allow_html=True)
         st.markdown(st.session_state.current_itinerary)
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.info("👈 左侧设置偏好，点击生成")
+        st.caption("在左侧设置旅行偏好，然后点击「生成行程」")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -436,34 +645,34 @@ with col1:
 with col2:
     # 天气
     st.markdown('<div class="weather-card">', unsafe_allow_html=True)
-    st.markdown(f'<div style="display:flex;justify-content:space-between;"><span style="font-weight:500;">{destination}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="weather-place">{destination}</div>', unsafe_allow_html=True)
     weather = get_weather(destination)
     if weather:
-        col_temp, col_cond = st.columns([1,1])
+        col_temp, col_cond = st.columns([1, 1])
         with col_temp:
-            st.markdown(f'<div class="weather-temp">{weather.get("temp","22")}°C</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="weather-temp">{weather.get("temp", "22")}<span class="unit">°C</span></div>', unsafe_allow_html=True)
         with col_cond:
-            st.markdown(f'<div class="weather-desc">☀️ {weather.get("condition","晴")}</div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="weather-desc" style="font-size:0.8rem;">💨 {weather.get("wind","微风")}</div>', unsafe_allow_html=True)
-        st.caption(f"变化：{weather.get('delta','0°C')}")
+            st.markdown(f'<div class="weather-desc">{weather.get("condition", "晴")}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="weather-desc" style="font-size:0.8rem;">{weather.get("wind", "微风")}</div>', unsafe_allow_html=True)
+        st.caption(f"变化：{weather.get('delta', '0°C')}")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # 地图
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="card-title">🗺️ 景点地图</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card-title">景点地图</div>', unsafe_allow_html=True)
     attrs = st.session_state.attractions if st.session_state.attractions else get_attractions(destination)
     if attrs:
-        render_map(destination, attrs, width=400, height=320)
+        render_map(destination, attrs)
     else:
-        st.info("暂无景点")
+        st.info("暂无景点数据")
     st.markdown('</div>', unsafe_allow_html=True)
     
     # 景点列表
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown('<div class="card-title">📍 推荐景点</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card-title">推荐景点</div>', unsafe_allow_html=True)
     attrs = st.session_state.attractions if st.session_state.attractions else get_attractions(destination)
     if attrs:
-        colors = ['#1a6dff','#ff6b35','#00c853','#ffab00','#e040fb','#00bcd4','#ff5252','#7c4dff']
+        colors = ['#d4839b','#e8a0b5','#c07a90','#dbb0c0','#e8b8c8','#d0a0b0','#c890a0','#e0b0c0']
         for i, attr in enumerate(attrs):
             color = colors[i % len(colors)]
             url = attr.get('url', '')
@@ -471,32 +680,30 @@ with col2:
                 st.markdown(f"""
                 <div class="attraction-item">
                     <span class="attraction-dot" style="background:{color};"></span>
-                    <span><strong>{attr['name']}</strong></span>
-                    <span style="margin-left:auto;font-size:0.8rem;">
-                        <a href="{url}" target="_blank" style="color:#1a6dff;text-decoration:none;">🔗 官网</a>
-                    </span>
+                    <span class="attraction-name">{attr['name']}</span>
+                    <a href="{url}" target="_blank" class="attraction-link">官网</a>
                 </div>
                 """, unsafe_allow_html=True)
             else:
                 st.markdown(f"""
                 <div class="attraction-item">
                     <span class="attraction-dot" style="background:{color};"></span>
-                    <span><strong>{attr['name']}</strong></span>
-                    <span style="margin-left:auto;font-size:0.75rem;color:#999;">{attr.get('desc','')}</span>
+                    <span class="attraction-name">{attr['name']}</span>
+                    <span class="attraction-desc">{attr.get('desc', '')}</span>
                 </div>
                 """, unsafe_allow_html=True)
     else:
-        st.caption("暂无")
+        st.caption("暂无景点数据")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ==================== 底部 ====================
-st.divider()
+# ----- 底部 -----
+st.markdown('<hr class="divider-sakura">', unsafe_allow_html=True)
 col_f1, col_f2, col_f3 = st.columns(3)
 with col_f1:
-    st.caption("💡 数据由 DeepSeek AI 实时生成")
+    st.caption("数据由 DeepSeek AI 生成")
 with col_f2:
-    if st.button("🔄 重置"):
+    if st.button("重置"):
         st.session_state.clear()
         st.rerun()
 with col_f3:
-    st.caption(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    st.caption(datetime.now().strftime("%Y年%m月%d日"))
